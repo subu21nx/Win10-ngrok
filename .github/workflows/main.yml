@@ -1,26 +1,24 @@
 name: Ubuntu VPS with Ngrok
 
-on:
-  workflow_dispatch: # Trigger manually from the GitHub Actions UI
+on: [push, workflow_dispatch]  # Trigger on push or manual dispatch
 
 jobs:
   setup-vps:
-    runs-on: ubuntu-22.04 # Explicitly use Ubuntu 22.04 to avoid warnings
+    runs-on: ubuntu-22.04  # Using Ubuntu 22.04
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-
-    - name: Install dependencies
+    - name: Update and Install Dependencies
       run: |
         sudo apt update
-        sudo apt install -y openssh-server wget
+        sudo apt install -y openssh-server wget jq unzip
 
-    - name: Set up SSH server for root
+    - name: Configure SSH Access
       run: |
+        # Enable root login
         echo "PermitRootLogin yes" | sudo tee -a /etc/ssh/sshd_config
         echo "PasswordAuthentication yes" | sudo tee -a /etc/ssh/sshd_config
         sudo systemctl restart sshd
+        # Set root password
         echo -e "Passxi23\nPassxi23" | sudo passwd root
         echo "Root user password has been set."
 
@@ -38,18 +36,23 @@ jobs:
 
     - name: Start Ngrok for SSH
       run: |
-        ngrok tcp 22 > ngrok-log.txt &
+        nohup ngrok tcp 22 &> ngrok.log &
         sleep 10 # Allow Ngrok to initialize
-        cat ngrok-log.txt
+        cat ngrok.log
 
-    - name: Get Ngrok public address
+    - name: Fetch Ngrok Public Address
       run: |
-        NGROK_URL=$(curl -s localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url')
-        echo "Your Ngrok SSH URL is: $NGROK_URL"
+        NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+        echo "Ngrok SSH URL: $NGROK_URL"
         echo $NGROK_URL > ngrok_ssh_url.txt
 
-    - name: Upload Ngrok URL as an artifact
-      uses: actions/upload-artifact@v4 # Updated to v4 to handle deprecation
+    - name: Upload Ngrok SSH URL as Artifact
+      uses: actions/upload-artifact@v4
       with:
         name: ngrok-ssh-url
         path: ngrok_ssh_url.txt
+
+    - name: Keep Workflow Running
+      run: |
+        echo "Ngrok tunnel is running. Use the SSH URL to connect."
+        tail -f /dev/null  # Keeps the workflow active until manually stopped
