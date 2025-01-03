@@ -1,11 +1,11 @@
 name: Ubuntu VPS with Ngrok
 
 on:
-  workflow_dispatch: # Trigger manually from GitHub Actions UI
+  workflow_dispatch: # Trigger manually from the GitHub Actions UI
 
 jobs:
   setup-vps:
-    runs-on: ubuntu-latest # No need to change until ubuntu-24.04 becomes the default
+    runs-on: ubuntu-22.04 # Explicitly use Ubuntu 22.04 to avoid warnings
 
     steps:
     - name: Checkout repository
@@ -29,7 +29,7 @@ jobs:
         wget https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-linux-amd64.zip
         unzip ngrok-stable-linux-amd64.zip
         sudo mv ngrok /usr/local/bin/
-      
+
     - name: Authenticate Ngrok
       env:
         NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
@@ -47,11 +47,9 @@ jobs:
         NGROK_URL=$(curl -s localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url')
         echo "Your Ngrok SSH URL is: $NGROK_URL"
         echo $NGROK_URL > ngrok_ssh_url.txt
-      env:
-        NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
 
     - name: Upload Ngrok URL as an artifact
-      uses: actions/upload-artifact@v4 # Updated to v4
+      uses: actions/upload-artifact@v4 # Updated to v4 to handle deprecation
       with:
         name: ngrok-ssh-url
         path: ngrok_ssh_url.txt
