@@ -1,26 +1,25 @@
-name: Ubuntu VPS with Ngrok
+name: Ubuntu VPS with Ngrok for SSH (6+ Hours)
 
-on: [push, workflow_dispatch]  # Trigger on push or manual dispatch
+on: [push, workflow_dispatch]
 
 jobs:
   setup-vps:
-    runs-on: ubuntu-22.04  # Using Ubuntu 22.04
+    runs-on: ubuntu-22.04
 
     steps:
     - name: Update and Install Dependencies
       run: |
-        sudo apt update
+        sudo apt update && sudo apt upgrade -y
         sudo apt install -y openssh-server wget jq unzip
 
     - name: Configure SSH Access
       run: |
-        # Enable root login
+        # Enable root login and password authentication
         echo "PermitRootLogin yes" | sudo tee -a /etc/ssh/sshd_config
         echo "PasswordAuthentication yes" | sudo tee -a /etc/ssh/sshd_config
         sudo systemctl restart sshd
         # Set root password
-        echo -e "Passxi23\nPassxi23" | sudo passwd root
-        echo "Root user password has been set."
+        echo -e "P@ssw0rd123\nP@ssw0rd123" | sudo passwd root
 
     - name: Download Ngrok
       run: |
@@ -31,20 +30,29 @@ jobs:
     - name: Authenticate Ngrok
       env:
         NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
-      run: |
-        ngrok authtoken $NGROK_AUTH_TOKEN
+      run: ngrok authtoken $NGROK_AUTH_TOKEN
 
-    - name: Start Ngrok for SSH
+    - name: Start Ngrok Tunnel for SSH
       run: |
-        nohup ngrok tcp 22 &> ngrok.log &
-        sleep 10 # Allow Ngrok to initialize
-        cat ngrok.log
+        nohup ngrok tcp 22 > ngrok.log 2>&1 &
+        sleep 10  # Wait for Ngrok to initialize
 
     - name: Fetch Ngrok Public Address
       run: |
-        NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
-        echo "Ngrok SSH URL: $NGROK_URL"
-        echo $NGROK_URL > ngrok_ssh_url.txt
+        for i in {1..10}; do
+          NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url' || echo "")
+          if [ -n "$NGROK_URL" ]; then
+            echo "Ngrok SSH URL: $NGROK_URL"
+            echo $NGROK_URL > ngrok_ssh_url.txt
+            break
+          fi
+          echo "Retrying to fetch Ngrok URL... ($i)"
+          sleep 2
+        done
+        if [ ! -s ngrok_ssh_url.txt ]; then
+          echo "Failed to fetch Ngrok URL." >&2
+          exit 1
+        fi
 
     - name: Upload Ngrok SSH URL as Artifact
       uses: actions/upload-artifact@v4
@@ -52,7 +60,7 @@ jobs:
         name: ngrok-ssh-url
         path: ngrok_ssh_url.txt
 
-    - name: Keep Workflow Running
+    - name: Keep Workflow Running for 6 Hours
       run: |
-        echo "Ngrok tunnel is running. Use the SSH URL to connect."
-        tail -f /dev/null  # Keeps the workflow active until manually stopped
+        echo "Ngrok tunnel is active. Workflow will run for 6 hours."
+        timeout 6h tail -f /dev/null
